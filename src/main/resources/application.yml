@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    active: session  # session 또는 jwt로 변경
   datasource:
     url: jdbc:mysql://localhost:3306/ktb_community?allowPublicKeyRetrieval=true&serverTimezone=UTC&useSSL=false
     username: ${DB_USERNAME}

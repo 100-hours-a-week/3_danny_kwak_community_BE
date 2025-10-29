@@ -3,6 +3,7 @@ package com.ktb.community.config;
 import com.ktb.community.jwt.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -20,6 +21,7 @@ import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
+@Profile("jwt")
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -39,7 +41,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // CORS 설정 추가
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))// 세션을 무상태로 저장 JWT를 사용하므로 세션을 서버에 저장 X
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/auth/**", "/users/check-email", "/css/**", "/js/**","/favicon.ico").permitAll()
+                        auth.requestMatchers("/auth/**", "/users/check-email", "/css/**", "/js/**", "/favicon.ico").permitAll()
                                 .anyRequest().authenticated()
                 )// URL별로 인가 정책을 결정
                 // /auth/나 /user/check-email은 인증 X
