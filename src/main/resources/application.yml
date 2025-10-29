@@ -12,11 +12,17 @@ spring:
       hibernate:
         format_sql: true
         use_sql_comments: true
+
   thymeleaf:
     cache: false
     check-template-location: true
     prefix: classpath:/templates/
     suffix: .html
+
+  data:
+    redis:
+      host: localhost
+      port : 6379
 jwt:
   expiration:
     access: 86400000
