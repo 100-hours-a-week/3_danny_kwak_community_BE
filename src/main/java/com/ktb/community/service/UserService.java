@@ -1,5 +1,6 @@
 package com.ktb.community.service;
 
+import com.ktb.community.dto.request.ChangePasswordRequestDto;
 import com.ktb.community.dto.request.ModifyNicknameRequestDto;
 import com.ktb.community.dto.response.AvailabilityResponseDto;
 import com.ktb.community.dto.response.CrudUserResponseDto;
@@ -10,10 +11,12 @@ import com.ktb.community.entity.Post;
 import com.ktb.community.entity.User;
 import com.ktb.community.exception.custom.DuplicateNicknameException;
 import com.ktb.community.exception.custom.InvalidNicknameException;
+import com.ktb.community.exception.custom.InvalidPasswordException;
 import com.ktb.community.exception.custom.UserNotFoundException;
 import com.ktb.community.jwt.JwtUtil;
 import com.ktb.community.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,9 +35,10 @@ public class UserService {
     private final LikeRepository likeRepository;
     private final RefreshRepository refreshRepository;
     private final JwtUtil jwtUtil;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    public UserService(UserRepository userRepository, PostRepository postRepository, CommentRepository commentRepository, CountRepository countRepository, ImageRepository imageRepository, LikeRepository likeRepository, RefreshRepository refreshRepository, JwtUtil jwtUtil) {
+    public UserService(UserRepository userRepository, PostRepository postRepository, CommentRepository commentRepository, CountRepository countRepository, ImageRepository imageRepository, LikeRepository likeRepository, RefreshRepository refreshRepository, JwtUtil jwtUtil, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
@@ -43,6 +47,7 @@ public class UserService {
         this.likeRepository = likeRepository;
         this.refreshRepository = refreshRepository;
         this.jwtUtil = jwtUtil;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public AvailabilityResponseDto checkDuplicateEmail(String email) {
@@ -77,6 +82,31 @@ public class UserService {
         }
 
         user.setNickname(newNickname);
+        return new CrudUserResponseDto(user.getId());
+    }
+
+    @Transactional
+    public CrudUserResponseDto changePassword(String email, ChangePasswordRequestDto changePasswordRequestDto) {
+        User user = this.userRepository.findByEmail(email)
+                .orElseThrow(() -> new UserNotFoundException("Not found user"));
+
+        // 현재 비밀번호 확인
+        if (!passwordEncoder.matches(changePasswordRequestDto.getCurrentPassword(), user.getPassword())) {
+            throw new InvalidPasswordException("Current password is incorrect");
+        }
+
+        // 새 비밀번호가 현재 비밀번호와 동일한지 확인
+        if (changePasswordRequestDto.getCurrentPassword().equals(changePasswordRequestDto.getNewPassword())) {
+            throw new InvalidPasswordException("New password must be different from current password");
+        }
+
+        // 새 비밀번호 유효성 검증
+        if (!this.checkValidityPassword(changePasswordRequestDto.getNewPassword()).getIsAvailable()) {
+            throw new InvalidPasswordException("New password does not meet requirements");
+        }
+
+        // 비밀번호 변경
+        user.setPassword(passwordEncoder.encode(changePasswordRequestDto.getNewPassword()));
         return new CrudUserResponseDto(user.getId());
     }
 

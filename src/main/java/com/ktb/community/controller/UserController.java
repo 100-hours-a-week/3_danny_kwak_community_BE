@@ -1,5 +1,6 @@
 package com.ktb.community.controller;
 
+import com.ktb.community.dto.request.ChangePasswordRequestDto;
 import com.ktb.community.dto.request.EmailCheckRequestDto;
 import com.ktb.community.dto.request.ModifyNicknameRequestDto;
 import com.ktb.community.dto.request.PasswordCheckRequestDto;
@@ -41,6 +42,7 @@ public class UserController {
         return ResponseEntity.ok().body(ApiResponseDto.success(availabilityResponseDto));
     }
 
+
     @PostMapping("/password")
     ResponseEntity<ApiResponseDto<AvailabilityResponseDto>> checkValidityPassword(@RequestBody @Valid PasswordCheckRequestDto passwordCheckRequestDto, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -52,6 +54,24 @@ public class UserController {
 
         AvailabilityResponseDto availabilityResponseDto = this.userService.checkValidityPassword(passwordCheckRequestDto.getPassword());
         return ResponseEntity.ok().body(ApiResponseDto.success(availabilityResponseDto));
+    }
+
+    @PatchMapping("/password")
+    public ResponseEntity<ApiResponseDto<?>> changePassword(
+            @RequestBody @Valid ChangePasswordRequestDto changePasswordRequestDto,
+            BindingResult bindingResult,
+            Authentication authentication) {
+        if (bindingResult.hasErrors()) {
+            String message = bindingResult.getFieldError() != null
+                    ? bindingResult.getFieldError().getDefaultMessage()
+                    : "Not a valid request";
+            return ResponseEntity.badRequest().body(ApiResponseDto.error(message));
+        }
+
+        String email = authentication.getName();
+        CrudUserResponseDto crudUserResponseDto = this.userService.changePassword(email, changePasswordRequestDto);
+
+        return ResponseEntity.ok().body(ApiResponseDto.success(crudUserResponseDto));
     }
 
     @GetMapping("/me")
