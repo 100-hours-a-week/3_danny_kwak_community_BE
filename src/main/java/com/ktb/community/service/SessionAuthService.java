@@ -2,46 +2,32 @@ package com.ktb.community.service;
 
 import com.ktb.community.dto.request.LoginRequestDto;
 import com.ktb.community.dto.request.SignUpRequestDto;
-import com.ktb.community.dto.response.ApiResponseDto;
-import com.ktb.community.dto.response.LoginResponseDto;
-import com.ktb.community.entity.Refresh;
 import com.ktb.community.entity.User;
 import com.ktb.community.exception.custom.DuplicateEmailException;
 import com.ktb.community.exception.custom.InvalidCredentialsException;
 import com.ktb.community.exception.custom.UserNotFoundException;
-import com.ktb.community.jwt.JwtUtil;
 import com.ktb.community.repository.UserRepository;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.transaction.Transactional;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-
+@Slf4j
 @Service
-@Profile("jwt")
-public class AuthService {
+@Profile("session")
+public class SessionAuthService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
-    private final AuthenticationManager authenticationManager;
-    private final RefreshTokenService refreshTokenService;
+    private final SessionService sessionService;
 
-    @Autowired
-    public AuthService(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder, JwtUtil jwtUtil, AuthenticationManager authenticationManager, RefreshTokenService refreshTokenService) {
+    public SessionAuthService(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder, SessionService sessionService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
-        this.jwtUtil = jwtUtil;
-        this.authenticationManager = authenticationManager;
-        this.refreshTokenService = refreshTokenService;
+        this.sessionService = sessionService;
     }
 
     public Long signUpUser(SignUpRequestDto signUpRequestDto) {
@@ -64,7 +50,7 @@ public class AuthService {
         if (!this.userService.checkValidityPassword(signUpRequestDto.getPassword()).getIsAvailable()) {
             throw new IllegalArgumentException("Password does not meet requirements");
         }
-        // bcyrpt로 암호화 추가하기
+        // bcrypt로 암호화
         user.setPassword(passwordEncoder.encode(signUpRequestDto.getPassword()));
         user.setNickname(signUpRequestDto.getNickname());
         user.setProfileImage(signUpRequestDto.getProfileImage());
@@ -73,23 +59,19 @@ public class AuthService {
     }
 
     @Transactional
-    public LoginResponseDto login(LoginRequestDto loginRequestDto) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequestDto.getEmail(), loginRequestDto.getPassword())
-        );
+    public String login(LoginRequestDto loginRequestDto, HttpServletResponse response) {
+        // 사용자 조회
+        User user = this.userRepository.findByEmail(loginRequestDto.getEmail())
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        User user = this.userRepository.findByEmail(loginRequestDto.getEmail()).orElseThrow(() -> new UserNotFoundException("User not found"));
+        // 비밀번호 검증
+        if (!passwordEncoder.matches(loginRequestDto.getPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException("Invalid email or password");
+        }
 
-        // 다중 로그인을 사용하려면 추후 삭제하기
-        this.refreshTokenService.removeAllRefreshToken(user.getId());
+        // 세션 생성 + 쿠키 설정
+        String sessionId = sessionService.createSession(response, user.getId(), user.getNickname());
 
-        String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getId());
-
-        LocalDateTime expirationAt = this.jwtUtil.getExpirationFromToken(refreshToken);
-        this.refreshTokenService.saveRefreshToken(refreshToken, user, expirationAt);
-
-        return new LoginResponseDto(accessToken, refreshToken, user.getId());
+        return sessionId;
     }
-
 }

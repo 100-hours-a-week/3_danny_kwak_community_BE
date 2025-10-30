@@ -38,34 +38,18 @@ public class SessionService {
     }
 
     // 세션 생성 + 쿠키 설정
-    public String createSessionWithCookie(HttpServletResponse response, Long userId, String nickname) {
-        String sessionId = sessionUtil.createSession(userId, nickname);
-
-        Cookie cookie = new Cookie("SID", sessionId);
-        cookie.setHttpOnly(true);  // XSS 방어
-        cookie.setPath("/");
-        cookie.setMaxAge(3600);  // 1시간
-        response.addCookie(cookie);
-
-        return sessionId;
+    public String createSession(HttpServletResponse response, Long userId, String nickname) {
+        return   sessionUtil.createSession(userId, nickname);
     }
 
     // 세션 삭제 + 쿠키 삭제
-    public boolean removeSessionWithCookie(HttpServletRequest request, HttpServletResponse response) {
+    public boolean removeSession(HttpServletRequest request, HttpServletResponse response) {
         String sessionId = getSessionIdFromCookie(request);
         if (sessionId == null) {
             return false;
         }
 
         // Redis에서 세션 삭제
-        boolean result = sessionUtil.removeSession(sessionId);
-
-        // 쿠키 삭제
-        Cookie cookie = new Cookie("SID", null);
-        cookie.setMaxAge(0);
-        cookie.setPath("/");
-        response.addCookie(cookie);
-
-        return result;
+        return sessionUtil.removeSession(sessionId);
     }
 }
