@@ -1,8 +1,4 @@
 package com.ktb.community.jwt;
-
-
-import com.ktb.community.dto.request.LoginRequestDto;
-import com.ktb.community.entity.Refresh;
 import com.ktb.community.repository.RefreshRepository;
 import com.ktb.community.repository.UserRepository;
 import io.jsonwebtoken.*;
@@ -10,10 +6,10 @@ import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SecurityException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Base64;
