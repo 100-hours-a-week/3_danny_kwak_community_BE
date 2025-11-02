@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 
 import java.security.Key;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Base64;
 import java.util.Date;
 
@@ -41,7 +43,7 @@ public class PureJwtUtil {
                 .compact();
     }
 
-    // 리프레시 토큰 발급 함수
+    // 리프레시 토큰 발급 함수 (보안을 위해 email 제거)
     public String generateRefreshToken(Long userId) {
         return Jwts.builder()
                 .setSubject(String.valueOf(userId))
@@ -70,6 +72,15 @@ public class PureJwtUtil {
             log.info("JWT claims string is empty", e);
         }
         return null;
+    }
+
+    public LocalDateTime getExpirationFromToken(String token) {
+        return parse(token)
+                .getBody()
+                .getExpiration()
+                .toInstant()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDateTime();
     }
 
 }

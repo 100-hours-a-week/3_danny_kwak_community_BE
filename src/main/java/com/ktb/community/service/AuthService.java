@@ -2,43 +2,35 @@ package com.ktb.community.service;
 
 import com.ktb.community.dto.request.LoginRequestDto;
 import com.ktb.community.dto.request.SignUpRequestDto;
-import com.ktb.community.dto.response.ApiResponseDto;
 import com.ktb.community.dto.response.LoginResponseDto;
-import com.ktb.community.entity.Refresh;
 import com.ktb.community.entity.User;
 import com.ktb.community.exception.custom.DuplicateEmailException;
 import com.ktb.community.exception.custom.InvalidCredentialsException;
 import com.ktb.community.exception.custom.UserNotFoundException;
-import com.ktb.community.jwt.JwtUtil;
+import com.ktb.community.purejwt.PureJwtUtil;
 import com.ktb.community.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 
 @Service
 public class AuthService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
-    private final AuthenticationManager authenticationManager;
+    private final PureJwtUtil pureJwtUtil;
     private final RefreshTokenService refreshTokenService;
 
     @Autowired
-    public AuthService(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder, JwtUtil jwtUtil, AuthenticationManager authenticationManager, RefreshTokenService refreshTokenService) {
+    public AuthService(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder, PureJwtUtil pureJwtUtil, RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
-        this.jwtUtil = jwtUtil;
-        this.authenticationManager = authenticationManager;
+        this.pureJwtUtil = pureJwtUtil;
         this.refreshTokenService = refreshTokenService;
     }
 
@@ -72,19 +64,20 @@ public class AuthService {
 
     @Transactional
     public LoginResponseDto login(LoginRequestDto loginRequestDto) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequestDto.getEmail(), loginRequestDto.getPassword())
-        );
+        User user = this.userRepository.findByEmail(loginRequestDto.getEmail())
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        User user = this.userRepository.findByEmail(loginRequestDto.getEmail()).orElseThrow(() -> new UserNotFoundException("User not found"));
+        if (!passwordEncoder.matches(loginRequestDto.getPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException("Invalid password");
+        }
 
-        // 다중 로그인을 사용하려면 추후 삭제하기
+        // TODO : 다중 로그인을 사용하려면 추후 삭제하기
         this.refreshTokenService.removeAllRefreshToken(user.getId());
 
-        String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getId());
+        String accessToken = pureJwtUtil.generateAccessToken(user.getId(), user.getEmail());
+        String refreshToken = pureJwtUtil.generateRefreshToken(user.getId());
 
-        LocalDateTime expirationAt = this.jwtUtil.getExpirationFromToken(refreshToken);
+        LocalDateTime expirationAt = pureJwtUtil.getExpirationFromToken(refreshToken);
         this.refreshTokenService.saveRefreshToken(refreshToken, user, expirationAt);
 
         return new LoginResponseDto(accessToken, refreshToken, user.getId());

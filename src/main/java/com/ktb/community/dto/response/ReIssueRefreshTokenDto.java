@@ -9,7 +9,11 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
+
 public class ReIssueRefreshTokenDto {
+    @JsonProperty("access_token")
+    private String accessToken;
+
     @JsonProperty("refresh_token")
-    public String refreshToken;
+    private String refreshToken;
 }

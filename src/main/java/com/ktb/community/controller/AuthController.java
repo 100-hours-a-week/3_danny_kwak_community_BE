@@ -54,7 +54,6 @@ public class AuthController {
             HttpServletResponse response) {
         LoginResponseDto loginResponse = this.authService.login(loginRequestDto);
 
-        // Refresh Token을 HttpOnly 쿠키로 설정
         Cookie refreshTokenCookie = new Cookie("refresh_token", loginResponse.getRefreshToken());
         refreshTokenCookie.setHttpOnly(true);
         refreshTokenCookie.setSecure(false);
@@ -62,7 +61,6 @@ public class AuthController {
         refreshTokenCookie.setMaxAge((int) (refreshTokenExpiration / 1000)); // application.yml 값 사용 (밀리초 → 초)
         response.addCookie(refreshTokenCookie);
 
-        // 응답 DTO에서는 refreshToken을 null로 설정 (보안)
         LoginResponseDto responseDto = new LoginResponseDto(
                 loginResponse.getAccessToken(),
                 null,

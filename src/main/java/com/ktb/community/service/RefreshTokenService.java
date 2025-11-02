@@ -1,122 +1,146 @@
 package com.ktb.community.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ktb.community.dto.redis.StoredTokenDto;
 import com.ktb.community.dto.response.ReIssueRefreshTokenDto;
-import com.ktb.community.entity.Refresh;
 import com.ktb.community.entity.User;
 import com.ktb.community.exception.custom.InvalidRefreshTokenException;
-import com.ktb.community.exception.custom.UserNotFoundException;
-import com.ktb.community.jwt.JwtUtil;
-import com.ktb.community.repository.RefreshRepository;
-import com.ktb.community.repository.UserRepository;
+import com.ktb.community.purejwt.PureJwtUtil;
+import com.ktb.community.redis.RedisSingleDataServiceImpl;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
 
 @Service
 @Transactional
 public class RefreshTokenService {
-    private final RefreshRepository refreshRepository;
-    private final JwtUtil jwtUtil;
-    private final UserRepository userRepository;
+    private final RedisSingleDataServiceImpl redis;
+    private final PureJwtUtil pureJwtUtil;
+    private final ObjectMapper objectMapper;
 
-
-    public RefreshTokenService(RefreshRepository refreshRepository, JwtUtil jwtUtil, UserRepository userRepository) {
-        this.refreshRepository = refreshRepository;
-        this.jwtUtil = jwtUtil;
-        this.userRepository = userRepository;
+    public RefreshTokenService(RedisSingleDataServiceImpl redis, PureJwtUtil pureJwtUtil, ObjectMapper objectMapper) {
+        this.redis = redis;
+        this.pureJwtUtil = pureJwtUtil;
+        this.objectMapper = objectMapper;
     }
 
     public void saveRefreshToken(String token, User user, LocalDateTime expiredAt) {
-        Refresh refreshToken = new Refresh();
-        refreshToken.setRefreshToken(token);
-        refreshToken.setUser(user);
-        refreshToken.setExpirationAt(expiredAt);
-
-        refreshRepository.save(refreshToken);
+        saveRefreshTokenWithEmail(token, user.getId(), user.getEmail(), expiredAt);
     }
 
-    public Refresh findByToken(String token) {
-        return refreshRepository.findByRefreshToken(token).orElseThrow(() -> new InvalidRefreshTokenException("Invalid refresh token"));
+    public void saveRefreshTokenWithEmail(String token, Long userId, String email, LocalDateTime expiredAt) {
+        String key = "refresh_token:" + userId;
+        long ttlSeconds = Duration.between(LocalDateTime.now(), expiredAt).getSeconds();
+
+        StoredTokenDto storedToken = StoredTokenDto.builder()
+                .refreshToken(token)
+                .email(email)
+                .build();
+
+        try {
+            String jsonValue = objectMapper.writeValueAsString(storedToken);
+            redis.setSingleData(key, jsonValue, Duration.ofSeconds(ttlSeconds));
+        } catch (JsonProcessingException e) {
+            throw new InvalidRefreshTokenException("Failed to serialize token");
+        }
     }
+
 
     public Boolean existByToken(String token) {
-        return this.refreshRepository.existsByRefreshToken(token);
+        var jws = pureJwtUtil.parse(token);
+        if (jws == null) return false;
+
+        long userId = Long.parseLong(jws.getBody().getSubject());
+
+        String key = "refresh_token:" + userId;
+        String jsonValue = redis.getSingleData(key);
+
+        if (jsonValue == null || jsonValue.isEmpty()) return false;
+
+        try {
+            StoredTokenDto storedToken = objectMapper.readValue(jsonValue, StoredTokenDto.class);
+            return token.equals(storedToken.getRefreshToken());
+        } catch (JsonProcessingException e) {
+            return false;
+        }
     }
 
-    public Refresh checkExistRefreshToken(String token) {
-        return findByToken(token);
+    private Long getUserIdFromToken(String token) {
+        var jws = pureJwtUtil.parse(token);
+        if (jws == null) {
+            throw new InvalidRefreshTokenException("Invalid refresh token");
+        }
+        return Long.parseLong(jws.getBody().getSubject());
+    }
+
+    private StoredTokenDto getStoredTokenFromRedis(Long userId) {
+        String key = "refresh_token:" + userId;
+        String jsonValue = redis.getSingleData(key);
+
+        if (jsonValue == null || jsonValue.isEmpty()) {
+            throw new InvalidRefreshTokenException("Token not found in Redis");
+        }
+
+        try {
+            return objectMapper.readValue(jsonValue, StoredTokenDto.class);
+        } catch (JsonProcessingException e) {
+            throw new InvalidRefreshTokenException("Failed to deserialize token");
+        }
     }
 
     public String reIssueAccessToken(String refreshToken) {
-        if (!jwtUtil.validateToken(refreshToken)) {
+        if (!existByToken(refreshToken)) {
             throw new InvalidRefreshTokenException("Invalid or expired refresh token");
         }
-        Refresh refresh = checkExistRefreshToken(refreshToken);
 
-        if (refresh.getExpirationAt().isBefore(LocalDateTime.now())) {
-            throw new InvalidRefreshTokenException("Refresh token expired");
-        }
+        Long userId = getUserIdFromToken(refreshToken);
+        StoredTokenDto storedToken = getStoredTokenFromRedis(userId);
 
-        return this.jwtUtil.generateAccessToken(refresh.getUser().getId(), refresh.getUser().getEmail());
+        return pureJwtUtil.generateAccessToken(userId, storedToken.getEmail());
     }
 
 
     @Transactional
     public ReIssueRefreshTokenDto reIssueRefreshToken(String refreshToken) {
-        // 존재하지 않는 다면 유효하지 않은 토큰
-        if (!this.existByToken(refreshToken)) {
-            throw new InvalidRefreshTokenException("Invalid refresh token");
-        }
+        StoredTokenDto storedToken = validateAndGetStoredToken(refreshToken);
+        Long userId = getUserIdFromToken(refreshToken);
 
-        LocalDateTime date1 = this.jwtUtil.getExpirationFromToken(refreshToken).truncatedTo(ChronoUnit.DAYS);
+        String newAccessToken = pureJwtUtil.generateAccessToken(userId, storedToken.getEmail());
+        String newRefreshToken = pureJwtUtil.generateRefreshToken(userId);
 
-        if (date1.isBefore(LocalDateTime.now())){
-            throw new InvalidRefreshTokenException("Invalid refresh token");
-        }
+        removeAllRefreshToken(userId);
+        LocalDateTime expirationAt = pureJwtUtil.getExpirationFromToken(newRefreshToken);
+        saveRefreshTokenWithEmail(newRefreshToken, userId, storedToken.getEmail(), expirationAt);
 
-        LocalDateTime date2 = LocalDateTime.now().truncatedTo(ChronoUnit.DAYS);
-        Duration diff = Duration.between(date2, date1);
-        long remainingDays = diff.toDays();
-        // refresh Token이 30%보다 많이 남았다면
-        if (remainingDays > 3){
-            return new ReIssueRefreshTokenDto(refreshToken);
-        }
-
-        // 3일 이하 남았으면 재발급
-        Refresh refresh = checkExistRefreshToken(refreshToken);
-        String newRefreshToken = this.jwtUtil.generateRefreshToken(refresh.getUser().getId());
-        User user = this.userRepository.findById(refresh.getUser().getId()).orElseThrow(() -> new UserNotFoundException("User not found"));
-        LocalDateTime expiredAt = this.jwtUtil.getExpirationFromToken(newRefreshToken);
-        this.removeRefreshToken(refreshToken);
-        this.saveRefreshToken(newRefreshToken, user, expiredAt);
-
-        return new ReIssueRefreshTokenDto(newRefreshToken);
+        return new ReIssueRefreshTokenDto(newAccessToken, newRefreshToken);
     }
 
-    public List<Refresh> findAllTokens(Long userId) {
-        return refreshRepository.findByUserId(userId);
-    }
+    private StoredTokenDto validateAndGetStoredToken(String refreshToken) {
+        Long userId = getUserIdFromToken(refreshToken);
+        StoredTokenDto storedToken = getStoredTokenFromRedis(userId);
 
-    public void removeRefreshToken(String token) {
-        this.refreshRepository.deleteByRefreshToken(token);
+        if (!refreshToken.equals(storedToken.getRefreshToken())) {
+            throw new InvalidRefreshTokenException("Token mismatch");
+        }
+
+        return storedToken;
     }
 
     public void removeAllRefreshToken(Long userId) {
-        this.refreshRepository.deleteAllByUserId(userId);
-    }
-
-    public void deleteExpiredTokens() {
-        List<Refresh> tokens = this.refreshRepository.findAll();
-        List<Refresh> expiredTokens = tokens.stream().filter((token) -> token.getExpirationAt().isBefore(LocalDateTime.now())).toList();
-        this.refreshRepository.deleteAll(expiredTokens);
+        String key = "refresh_token:" + userId;
+        redis.deleteSingleData(key);
     }
 
     public int calculateRemainingSeconds(String refreshToken) {
-        LocalDateTime expirationAt = this.jwtUtil.getExpirationFromToken(refreshToken);
+        LocalDateTime expirationAt = pureJwtUtil.getExpirationFromToken(refreshToken);
+
+        if (expirationAt == null) {
+            throw new InvalidRefreshTokenException("Cannot extract expiration from token");
+        }
+
         LocalDateTime now = LocalDateTime.now();
         Duration duration = Duration.between(now, expirationAt);
         return (int) duration.getSeconds();

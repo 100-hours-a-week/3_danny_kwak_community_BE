@@ -23,7 +23,7 @@ public class UserServiceTest {
     private UserRepository userRepository = Mockito.mock(UserRepository.class);
     private UserService userService = Mockito.mock(UserService.class);
     private PasswordEncoder passwordEncoder = Mockito.mock(PasswordEncoder.class);
-    private AuthService authService = new AuthService(userRepository, userService, passwordEncoder, null, null, null);
+    private AuthService authService = new AuthService(userRepository, userService, passwordEncoder, null, null);
 
 
     @Test
