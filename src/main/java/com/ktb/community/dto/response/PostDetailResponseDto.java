@@ -1,5 +1,6 @@
 package com.ktb.community.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,6 +21,7 @@ public class PostDetailResponseDto {
     private Long views;
     private Long comments;
     private Long likes;
-    private LocalDateTime createAt;
+    @JsonProperty("created_at")
+    private LocalDateTime createdAt;
     private List<String> images;
 }

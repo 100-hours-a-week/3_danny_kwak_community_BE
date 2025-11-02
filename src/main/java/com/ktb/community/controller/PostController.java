@@ -46,8 +46,10 @@ public class PostController {
 
     @GetMapping("/{postId}/comments")
     public ResponseEntity<ApiResponseDto<?>> getComment(@PathVariable Long postId, @RequestParam(required = false) Long cursor,
-                                                        @RequestParam(defaultValue = "5") int size) {
-        CursorCommentResponseDto<CommentResponseDto> cursorCommentResponseDto = this.postService.getCommentList(postId, cursor, size);
+                                                        @RequestParam(defaultValue = "5") int size, @RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.substring(7);
+
+        CursorCommentResponseDto<CommentResponseDto> cursorCommentResponseDto = this.commentService.getCommentList(postId, cursor, size, token);
         return ResponseEntity.ok().body(ApiResponseDto.success(cursorCommentResponseDto));
     }
 

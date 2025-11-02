@@ -99,7 +99,7 @@ public class PostService {
                             .title(post.getTitle())
                             .content(post.getContent())
                             .author(post.getUser().getNickname())
-                            .createAt(post.getCreatedAt())
+                            .createdAt(post.getCreatedAt())
                             .views(count != null ? count.getViewCount() : 0L)
                             .likes(count != null ? count.getLikeCount() : 0L)
                             .comments(count != null ? count.getCommentCount() : 0L)
@@ -130,40 +130,13 @@ public class PostService {
                 .content(post.getContent())
                 .author(post.getUser().getNickname())
                 .images(images)
+                .createdAt(post.getCreatedAt())
                 .views(count != null ? count.getViewCount() : 0L)
                 .likes(count != null ? count.getLikeCount() : 0L)
                 .comments(count != null ? count.getCommentCount() : 0L)
                 .build();
     }
 
-
-    public CursorCommentResponseDto<CommentResponseDto> getCommentList(Long postId, Long cursor, int size) {
-        List<Comment> comments;
-        Pageable pageable = PageRequest.of(0, size + 1);
-        if (cursor == null) {
-            comments = this.commentRepository.findByPostIdAndDeletedAtIsNullOrderByCreatedAtDesc(postId, pageable);
-        } else {
-            comments = this.commentRepository.findByPostIdAndIdLessThanAndDeletedAtIsNullOrderByCreatedAtDesc(postId, cursor, pageable);
-        }
-
-        boolean hasNext = comments.size() > size;
-        if (hasNext) {
-            comments = comments.subList(0, size);
-        }
-
-        List<CommentResponseDto> commentList = comments.stream()
-                .map(comment -> CommentResponseDto.builder()
-                        .id(comment.getId())
-                        .author(comment.getUser().getNickname())
-                        .content(comment.getContent())
-                        .createdAt(comment.getCreatedAt())
-                        .isMine(false) // 인증이 추가되면 로직 변경하기
-                        .build())
-                .toList();
-
-        Long nextCursor = !commentList.isEmpty() ? commentList.getLast().getId() : null;
-        return new CursorCommentResponseDto<>(commentList, nextCursor, hasNext);
-    }
 
     @Transactional
     public CrudPostResponseDto modifyPostContent(Long postId, String token, ModifyPostRequestDto modifyPostRequestDto) {

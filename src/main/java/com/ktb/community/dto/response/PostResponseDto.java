@@ -1,5 +1,7 @@
 package com.ktb.community.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.JoinColumn;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,5 +21,6 @@ public class PostResponseDto {
     private Long views;
     private Long comments;
     private Long likes;
-    private LocalDateTime createAt;
+    @JsonProperty("created_at")
+    private LocalDateTime createdAt;
 }
