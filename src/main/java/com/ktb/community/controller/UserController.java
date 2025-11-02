@@ -9,11 +9,12 @@ import com.ktb.community.dto.response.AvailabilityResponseDto;
 import com.ktb.community.dto.response.CrudUserResponseDto;
 import com.ktb.community.dto.response.UserInfoResponseDto;
 import com.ktb.community.service.UserService;
+import com.ktb.community.util.JwtRequestUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,7 +29,6 @@ public class UserController {
     public UserController(UserService userService) {
         this.userService = userService;
     }
-
 
     @PostMapping("/email")
     ResponseEntity<ApiResponseDto<AvailabilityResponseDto>> checkEmail(@RequestBody @Valid EmailCheckRequestDto emailCheckDto, BindingResult bindingResult) {
@@ -60,7 +60,7 @@ public class UserController {
     public ResponseEntity<ApiResponseDto<?>> changePassword(
             @RequestBody @Valid ChangePasswordRequestDto changePasswordRequestDto,
             BindingResult bindingResult,
-            Authentication authentication) {
+            HttpServletRequest request) {
         if (bindingResult.hasErrors()) {
             String message = bindingResult.getFieldError() != null
                     ? bindingResult.getFieldError().getDefaultMessage()
@@ -68,37 +68,32 @@ public class UserController {
             return ResponseEntity.badRequest().body(ApiResponseDto.error(message));
         }
 
-        String email = authentication.getName();
-        CrudUserResponseDto crudUserResponseDto = this.userService.changePassword(email, changePasswordRequestDto);
+        CrudUserResponseDto crudUserResponseDto =
+                this.userService.changePassword(JwtRequestUtil.getEmail(request), changePasswordRequestDto);
 
         return ResponseEntity.ok().body(ApiResponseDto.success(crudUserResponseDto));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponseDto<?>> getMyInformation(Authentication authentication) {
-        String email = authentication.getName();
-
-        UserInfoResponseDto userInfoResponseDto = this.userService.readMyInfo(email);
+    public ResponseEntity<ApiResponseDto<?>> getMyInformation(HttpServletRequest request) {
+        UserInfoResponseDto userInfoResponseDto = this.userService.readMyInfo(JwtRequestUtil.getEmail(request));
         return ResponseEntity.ok().body(ApiResponseDto.success(userInfoResponseDto));
-
     }
 
     @PatchMapping("/nickname")
     public ResponseEntity<ApiResponseDto<?>> patchNickname(
             @RequestBody @Valid ModifyNicknameRequestDto modifyNicknameRequestDto,
-            Authentication authentication) {
-        String email = authentication.getName();
-        CrudUserResponseDto crudUserResponseDto = this.userService.changeNickname(email, modifyNicknameRequestDto);
+            HttpServletRequest request) {
+        CrudUserResponseDto crudUserResponseDto =
+                this.userService.changeNickname(JwtRequestUtil.getEmail(request), modifyNicknameRequestDto);
 
         return ResponseEntity.ok().body(ApiResponseDto.success(crudUserResponseDto));
-
     }
 
     @DeleteMapping("/me")
-    public ResponseEntity<ApiResponseDto<?>> deleteUser(Authentication authentication){
-        String email = authentication.getName();
+    public ResponseEntity<ApiResponseDto<?>> deleteUser(HttpServletRequest request) {
         //TODO : 삭제 로직 구현하기
-        this.userService.removeUser(email);
+        this.userService.removeUser(JwtRequestUtil.getEmail(request));
         return ResponseEntity.ok().body(ApiResponseDto.success("test중"));
     }
 }

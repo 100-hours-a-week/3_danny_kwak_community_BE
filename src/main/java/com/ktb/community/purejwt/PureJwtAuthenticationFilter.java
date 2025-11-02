@@ -23,7 +23,15 @@ public class PureJwtAuthenticationFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper;
 
     private static final String[] EXCLUDED_PATHS = {
-            "/auth", "/auth/login", "/users/check-email", "/users/password"
+            "/auth",
+            "/auth/login",
+            "/auth/consent",
+            "/users/email",
+            "/users/password"
+    };
+
+    private static final String[] EXCLUDED_PATH_PATTERNS = {
+            "GET:/posts$"  // GET /posts만 허용 (목록 조회)
     };
 
     @Autowired
@@ -35,7 +43,20 @@ public class PureJwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getRequestURI();
-        return Arrays.stream(EXCLUDED_PATHS).anyMatch(path::startsWith);
+        String method = request.getMethod();
+
+        // CORS preflight 요청(OPTIONS)은 필터링 제외
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            return true;
+        }
+
+        if (Arrays.stream(EXCLUDED_PATHS).anyMatch(path::startsWith)) {
+            return true;
+        }
+
+        String methodPath = method + ":" + path;
+        return Arrays.stream(EXCLUDED_PATH_PATTERNS)
+                .anyMatch(pattern -> methodPath.matches(pattern.replace("$", "")));
     }
 
     @Override
@@ -87,6 +108,7 @@ public class PureJwtAuthenticationFilter extends OncePerRequestFilter {
             Claims body = jws.getBody();
             request.setAttribute("userId", Long.valueOf(body.getSubject()));
             request.setAttribute("email", body.get("email", String.class));
+            request.setAttribute("token", token);  // 검증된 토큰도 저장
             return true;
         } catch (Exception e) {
             return false;
